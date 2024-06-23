@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Встроенное видео с YouTube</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: black;
+        }
+        #player {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        .volume-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 50%;
+            width: 100px;
+            height: 100px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px;
+            color: white;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .fade-in {
+            opacity: 1 !important;
+        }
+        .slide-up, .slide-down {
+            animation-duration: 0.5s;
+            animation-fill-mode: forwards;
+        }
+        .slide-up {
+            animation-name: slide-up;
+        }
+        .slide-down {
+            animation-name: slide-down;
+        }
+        @keyframes slide-up {
+            from { transform: translateY(0); }
+            to { transform: translateY(-100%); }
+        }
+        @keyframes slide-down {
+            from { transform: translateY(0); }
+            to { transform: translateY(100%); }
+        }
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 20px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        .loading-spinner {
+            border: 8px solid rgba(255, 255, 255, 0.1);
+            border-left-color: white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .show-loading {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="player"></div>
+    <div id="volume-indicator" class="volume-indicator"></div>
+    <div id="loading-screen">
+        <div class="loading-spinner"></div>
+        <div style="margin-left: 20px;">ЗАВАНТАЖЕННЯ</div>
+    </div>
+    <script>
+        // Загрузка IFrame Player API
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        // Массив с ID видео
+        var videoIds = ['ASndlvhI8p0', 'WY8sDvZdWEA']; // Замените на ваши ID видео
+        var currentVideoIndex = 0;
+
+        // Создание плеера после загрузки API
+        var player;
+        function onYouTubeIframeAPIReady() {
+            console.log("YouTube IFrame API ready");
+            player = new YT.Player('player', {
+                videoId: videoIds[currentVideoIndex],
+                playerVars: {
+                    'autoplay': 1,
+                    'controls': 0,
+                    'showinfo': 0,
+                    'modestbranding': 1,
+                    'rel': 0,
+                    'fs': 1,
+                    'iv_load_policy': 3,
+                    'disablekb': 1
+                },
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            console.log("Player is ready");
+            event.target.playVideo();
+            document.addEventListener('keydown', handleKeydown);
+            // Восстановление фокуса на основном документе
+            setInterval(() => {
+                if (document.activeElement.tagName === 'IFRAME') {
+                    document.activeElement.blur();
+                }
+            }, 100);
+        }
+
+        function onPlayerStateChange(event) {
+            if (event.data == YT.PlayerState.ENDED) {
+                console.log("Video ended, restarting");
+                event.target.playVideo(); // Зациклить видео при завершении
+            }
+        }
+
+        function handleKeydown(event) {
+            console.log("Key pressed:", event.key);
+            switch(event.key) {
+                case 'ArrowUp':
+                    currentVideoIndex = (currentVideoIndex - 1 + videoIds.length) % videoIds.length;
+                    console.log("Switching to video ID:", videoIds[currentVideoIndex]);
+                    switchVideo('up');
+                    break;
+                case 'ArrowDown':
+                    currentVideoIndex = (currentVideoIndex + 1) % videoIds.length;
+                    console.log("Switching to video ID:", videoIds[currentVideoIndex]);
+                    switchVideo('down');
+                    break;
+                case 'ArrowLeft':
+                    let newVolumeDown = Math.max(player.getVolume() - 1, 0);
+                    console.log("Decreasing volume to:", newVolumeDown);
+                    player.setVolume(newVolumeDown);
+                    showVolumeIndicator(newVolumeDown);
+                    break;
+                case 'ArrowRight':
+                    let newVolumeUp = Math.min(player.getVolume() + 1, 100);
+                    console.log("Increasing volume to:", newVolumeUp);
+                    player.setVolume(newVolumeUp);
+                    showVolumeIndicator(newVolumeUp);
+                    break;
+            }
+        }
+
+        function switchVideo(direction) {
+            var playerElement = document.getElementById('player');
+            var animationClass = direction === 'up' ? 'slide-up' : 'slide-down';
+            playerElement.classList.add(animationClass);
+            playerElement.addEventListener('animationend', function() {
+                showLoadingScreen(direction);
+                playerElement.classList.remove(animationClass);
+            }, {once: true});
+        }
+
+        function showLoadingScreen(direction) {
+            var loadingScreen = document.getElementById('loading-screen');
+            loadingScreen.classList.add('show-loading');
+            setTimeout(() => {
+                player.loadVideoById(videoIds[currentVideoIndex]);
+                player.playVideo(); // Запустить видео
+                var playerElement = document.getElementById('player');
+                loadingScreen.classList.remove('show-loading');
+                playerElement.classList.add(direction === 'up' ? 'slide-down' : 'slide-up');
+                playerElement.addEventListener('animationend', function() {
+                    playerElement.classList.remove(direction === 'up' ? 'slide-down' : 'slide-up');
+                }, {once: true});
+            }, 500); // Небольшая задержка для демонстрации черного экрана
+        }
+
+        function showVolumeIndicator(volume) {
+            var volumeIndicator = document.getElementById('volume-indicator');
+            volumeIndicator.textContent = volume;
+            volumeIndicator.classList.add('fade-in');
+            setTimeout(() => {
+                volumeIndicator.classList.remove('fade-in');
+            }, 500);
+        }
+    </script>
+</body>
+</html>
